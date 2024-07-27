@@ -63,7 +63,7 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "Update ReadMe with AI response"
 
           # Push changes to the repository
-          git push https://x-access-token:${{ secrets.CI_PAT }}@github.com/achrainer123/$repo.git HEAD:chore/ai-readme-generation --force
+          git push https://x-access-token:${{ secrets.CI_PAT }}@github.com/achrainer1112/$repo.git HEAD:chore/ai-readme-generation --force
 
           # Return to the root directory for the next repository
           cd ..
@@ -96,7 +96,7 @@ jobs:
 
           # Get default branch
           default_branch=$(curl -s -H "Authorization: token ${{ secrets.CI_PAT }}" \
-            https://api.github.com/repos/achrainer123/$repo | jq -r .default_branch)
+            https://api.github.com/repos/achrainer1112/$repo | jq -r .default_branch)
 
           if [ "$default_branch" == "null" ]; then
             echo "Could not retrieve default branch for $repo"
