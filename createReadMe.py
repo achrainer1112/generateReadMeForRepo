@@ -59,7 +59,7 @@ def main():
 
     repo_name = sys.argv[1]
     dry_run = sys.argv[2]
-    repo_url = f"https://github.com/achrainer123/{repo_name}.git"
+    repo_url = f"https://github.com/achrainer1112/{repo_name}.git"
 
     # Clone the repository using 'gh'
     try:
