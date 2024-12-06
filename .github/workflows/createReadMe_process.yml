@@ -11,10 +11,6 @@ on:
         required: true
         default: 'false'
         type: boolean
-      script_repo_path:
-        description: 'Path to the folder containing prompt.txt'
-        required: true
-        default: './'
 
 jobs:
   process-files:
@@ -42,7 +38,6 @@ jobs:
       run: |
         repos="${{ github.event.inputs.repositories }}"
         dryRun="${{ github.event.inputs.dry_run }}"
-        script_repo_path="${{ github.event.inputs.script_repo_path }}"
 
         IFS=',' read -ra REPO_ARRAY <<< "$repos"
 
@@ -52,8 +47,8 @@ jobs:
           
         for repo in "${REPO_ARRAY[@]}"; do
           echo "Processing repository: $repo"
-          python workflow-repo/createReadMe.py $repo $dryRun $script_repo_path
-          
+          python workflow-repo/createReadMe.py $repo $dryRun
+
           if [ "$dryRun" = "true" ]; then
             continue
           fi
@@ -76,3 +71,50 @@ jobs:
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.CI_PAT }}
+      
+    - name: Create Pull Requests
+      if: success()
+      run: |
+        repos="${{ github.event.inputs.repositories }}"
+        dryRun="${{ github.event.inputs.dry_run }}"
+
+        if [ "$dryRun" = true ]; then
+          echo "Dry Run: Skipping Pull Request creation"
+        fi
+          
+        
+        IFS=',' read -ra REPO_ARRAY <<< "$repos"
+        for repo in "${REPO_ARRAY[@]}"; do
+          if [ "$dryRun" = true ]; then
+            continue
+          fi
+          
+          echo "Processing repository: $repo"
+
+          # Change directory to the cloned repository
+          cd $repo
+
+          # Get default branch
+          default_branch=$(curl -s -H "Authorization: token ${{ secrets.CI_PAT }}" \
+            https://api.github.com/repos/achrainer1112/$repo | jq -r .default_branch)
+
+          if [ "$default_branch" == "null" ]; then
+            echo "Could not retrieve default branch for $repo"
+            continue
+          fi
+
+          # Check if a pull request already exists for the branch
+          existing_pr=$(gh pr list --base $default_branch --head chore/ai-readme-generation --state open --json number -q '.[].number')
+
+          if [ -n "$existing_pr" ]; then
+            echo "A Pull Request already exists for branch 'chore/ai-readme-generation' in $repo"
+          else
+            # Create Pull Request
+            gh pr create --base $default_branch --head chore/ai-readme-generation --title "Update ReadMe with AI response" --body "Automated update of README.md with AI response."
+          fi
+
+          # Return to the root directory for the next repository
+          cd ..
+        done
+      env:
+        GH_TOKEN: ${{ secrets.CI_PAT }}
