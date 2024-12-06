@@ -77,7 +77,7 @@ def main():
 
     # AI API information
     api_url = 'https://api.aimlapi.com/v1/completions'  # Endpoint von aimlapi.com
-    api_key = os.getenv('AIMLAPI_API_KEY')  # Lade den API-Key aus den Umgebungsvariablen
+    api_key = 'fe54736c824741faa7ce47bd2488e8ac'  # Lade den API-Key aus den Umgebungsvariablen
 
     if not api_key:
         print("Error: Environment variable AIMLAPI_API_KEY is not set")
