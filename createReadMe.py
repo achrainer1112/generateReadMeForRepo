@@ -2,10 +2,9 @@ import os
 import requests
 import subprocess
 import sys
-import tiktoken  # For token counting 
 
 # Define folders to be excluded from consideration
-exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle']
+exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle','.prt','.asm','.png']
 
 # Function to read a file and return its contents as a string
 def read_file(file_path):
@@ -16,19 +15,25 @@ def read_file(file_path):
         print(f"File not found: {file_path}")
         return ""
 
-# Function to send a request to the AI API
+# Function to send a request to the aimlapi.com API
 def send_to_ai(api_url, api_key, text):
     headers = {
         'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json'
     }
     data = {
-        'model': 'gpt-4o-mini',
-        'messages': [{'role': 'user', 'content': text}],
-        'max_tokens': 2048
+        'model': 'gpt-j',  # Beispielmodell, das kostenlos bei aimlapi.com verfügbar ist
+        'prompt': text,
+        'max_tokens': 2048,
+        'temperature': 0.7  # Optional: Beeinflusst die Kreativität der AI
     }
-    response = requests.post(api_url, headers=headers, json=data)
-    return response.json()
+    try:
+        response = requests.post(api_url, headers=headers, json=data)
+        response.raise_for_status()  # Überprüft, ob die Anfrage erfolgreich war
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Fehler bei der Anfrage: {e}")
+        return {"error": str(e)}
 
 # Function to write the AI response or error message to the ReadMe file
 def write_to_readme(readme_path, repo_name, content):
@@ -46,11 +51,6 @@ def is_excluded_folder(path):
             return True
         path = os.path.dirname(path)
     return False
-
-# Function to count tokens 
-def count_tokens(text):
-    tokenizer = tiktoken.get_encoding("cl100k_base")
-    return len(tokenizer.encode(text))
 
 def main():
     if len(sys.argv) < 3:
@@ -77,11 +77,11 @@ def main():
     prompt_text = read_file(prompt_file_path)
 
     # AI API information
-    api_url = 'https://api.openai.com/v1/chat/completions'
-    api_key = os.getenv('OPENAI_API_KEY')  # Load API key from environment variables
+    api_url = 'https://api.aimlapi.com/v1/completions'  # Endpoint von aimlapi.com
+    api_key_aiml = os.getenv('AIMLAPI_API_KEY')  # Lade den API-Key aus den Umgebungsvariablen
 
     if not api_key:
-        print("Error: Environment variable OPENAI_API_KEY is not set")
+        print("Error: Environment variable AIMLAPI_API_KEY is not set")
         return
     
     # Collect file details for summary
@@ -106,11 +106,6 @@ def main():
             except Exception as e:
                 print(f"Error reading the file {file_path}: {e}")
 
-    # Ensure prompt_text is encoded in utf-8
-    prompt_text = prompt_text.encode('utf-8', errors='ignore').decode('utf-8')
-
-    token_count = count_tokens(prompt_text)
-    
     if dry_run == 'true':
         # Print summary for dry run
         print("Summary (Dry Run):")
@@ -118,7 +113,6 @@ def main():
         for file in affected_files:
             print(f"- {file}")
         print(f"Total Characters in Prompt Text: {total_characters}")
-        print(f"Token count for model: {token_count}")
         print("Note: No AI request or repo changes are made.")
     else:
         try:
@@ -127,15 +121,13 @@ def main():
 
             if 'error' in response:
                 # Extract and print the error message
-                error_message = response['error']['message']
+                error_message = response['error']
                 print(f'Error processing the request: {error_message}')
                 # Write the error message to the ReadMe file
                 write_to_readme(os.path.join(cloned_repo_path, 'README.md'), repo_name, error_message)
-                if 'quota' in error_message:
-                    print("API quota reached. Process is terminated.")
             else:
                 # Extract the AI message
-                ai_message = response['choices'][0]['message']['content']
+                ai_message = response.get('completion', 'No completion returned.')
 
                 # Write the AI response to the ReadMe file
                 write_to_readme(os.path.join(cloned_repo_path, 'README.md'), repo_name, ai_message)
@@ -144,7 +136,6 @@ def main():
             print(f"Error sending the request to AI: {e}")
 
         print(f"Process completed for repository: {repo_name}. AI responses or errors were written to the ReadMe file.")
-
 
 # Execute the main program
 if __name__ == '__main__':
