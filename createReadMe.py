@@ -72,8 +72,7 @@ def main():
     cloned_repo_path = os.path.join(os.getcwd(), repo_name)
 
     # Read the prompt from prompt.txt in the script repository
-    script_repo_path = os.path.join(os.getcwd(), 'script-repo')  
-    prompt_file_path = os.path.join(script_repo_path, 'prompt.txt')
+    prompt_file_path = os.path.join(os.getcwd(), 'prompt.txt')
     prompt_text = read_file(prompt_file_path)
 
     # AI API information
