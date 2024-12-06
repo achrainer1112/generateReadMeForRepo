@@ -2,9 +2,10 @@ import os
 import requests
 import subprocess
 import sys
+import tiktoken  # For token counting 
 
 # Define folders to be excluded from consideration
-exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle', '.asm', '.prt', '.png']
+exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle']
 
 # Function to read a file and return its contents as a string
 def read_file(file_path):
@@ -15,25 +16,19 @@ def read_file(file_path):
         print(f"File not found: {file_path}")
         return ""
 
-# Function to send a request to the aimlapi.com API
+# Function to send a request to the AI API
 def send_to_ai(api_url, api_key, text):
     headers = {
         'Authorization': f'Bearer {api_key}',
         'Content-Type': 'application/json'
     }
     data = {
-        'model': 'google/gemma-2b-it',  # Neues Modell
-        'prompt': text,
-        'max_tokens': 2048,
-        'temperature': 0.7  # Optional: Beeinflusst die Kreativität der AI
+        'model': 'gpt-4o-mini',
+        'messages': [{'role': 'user', 'content': text}],
+        'max_tokens': 2048
     }
-    try:
-        response = requests.post(api_url, headers=headers, json=data)
-        response.raise_for_status()  # Überprüft, ob die Anfrage erfolgreich war
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Fehler bei der Anfrage: {e}")
-        return {"error": str(e)}
+    response = requests.post(api_url, headers=headers, json=data)
+    return response.json()
 
 # Function to write the AI response or error message to the ReadMe file
 def write_to_readme(readme_path, repo_name, content):
@@ -52,6 +47,11 @@ def is_excluded_folder(path):
         path = os.path.dirname(path)
     return False
 
+# Function to count tokens 
+def count_tokens(text):
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    return len(tokenizer.encode(text))
+
 def main():
     if len(sys.argv) < 3:
         print("Error: Missing repository name argument.")
@@ -63,10 +63,6 @@ def main():
 
     # Clone the repository using 'gh'
     try:
-        # Read the prompt from prompt.txt in the script repository
-        prompt_file_path = os.path.join(os.getcwd(), 'prompt.txt')
-        prompt_text = read_file(prompt_file_path)
-        
         subprocess.run(['gh', 'repo', 'clone', repo_url], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error cloning the repository: {e}")
@@ -75,12 +71,17 @@ def main():
     # Path to the cloned repository
     cloned_repo_path = os.path.join(os.getcwd(), repo_name)
 
+    # Read the prompt from prompt.txt in the script repository
+    script_repo_path = os.path.join(os.getcwd(), 'script-repo')  
+    prompt_file_path = os.path.join(script_repo_path, 'prompt.txt')
+    prompt_text = read_file(prompt_file_path)
+
     # AI API information
-    api_url = 'https://api.aimlapi.com/v1/completions'  # Endpoint von aimlapi.com
-    api_key = 'fe54736c824741faa7ce47bd2488e8ac'  # Lade den API-Key aus den Umgebungsvariablen
+    api_url = 'https://api.openai.com/v1/chat/completions'
+    api_key = os.getenv('OPENAI_API_KEY')  # Load API key from environment variables
 
     if not api_key:
-        print("Error: Environment variable AIMLAPI_API_KEY is not set")
+        print("Error: Environment variable OPENAI_API_KEY is not set")
         return
     
     # Collect file details for summary
@@ -105,6 +106,11 @@ def main():
             except Exception as e:
                 print(f"Error reading the file {file_path}: {e}")
 
+    # Ensure prompt_text is encoded in utf-8
+    prompt_text = prompt_text.encode('utf-8', errors='ignore').decode('utf-8')
+
+    token_count = count_tokens(prompt_text)
+    
     if dry_run == 'true':
         # Print summary for dry run
         print("Summary (Dry Run):")
@@ -112,6 +118,7 @@ def main():
         for file in affected_files:
             print(f"- {file}")
         print(f"Total Characters in Prompt Text: {total_characters}")
+        print(f"Token count for model: {token_count}")
         print("Note: No AI request or repo changes are made.")
     else:
         try:
@@ -120,13 +127,15 @@ def main():
 
             if 'error' in response:
                 # Extract and print the error message
-                error_message = response['error']
+                error_message = response['error']['message']
                 print(f'Error processing the request: {error_message}')
                 # Write the error message to the ReadMe file
                 write_to_readme(os.path.join(cloned_repo_path, 'README.md'), repo_name, error_message)
+                if 'quota' in error_message:
+                    print("API quota reached. Process is terminated.")
             else:
                 # Extract the AI message
-                ai_message = response.get('completion', 'No completion returned.')
+                ai_message = response['choices'][0]['message']['content']
 
                 # Write the AI response to the ReadMe file
                 write_to_readme(os.path.join(cloned_repo_path, 'README.md'), repo_name, ai_message)
@@ -135,6 +144,7 @@ def main():
             print(f"Error sending the request to AI: {e}")
 
         print(f"Process completed for repository: {repo_name}. AI responses or errors were written to the ReadMe file.")
+
 
 # Execute the main program
 if __name__ == '__main__':
