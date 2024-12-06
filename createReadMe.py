@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 # Define folders to be excluded from consideration
-exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle','.asm','.prt','.png']
+exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle', '.asm', '.prt', '.png']
 
 # Function to read a file and return its contents as a string
 def read_file(file_path):
@@ -22,7 +22,7 @@ def send_to_ai(api_url, api_key, text):
         'Content-Type': 'application/json'
     }
     data = {
-        'model': 'gpt-j',  # Beispielmodell, das kostenlos bei aimlapi.com verfügbar ist
+        'model': 'google/gemma-2b-it',  # Neues Modell
         'prompt': text,
         'max_tokens': 2048,
         'temperature': 0.7  # Optional: Beeinflusst die Kreativität der AI
@@ -77,7 +77,7 @@ def main():
 
     # AI API information
     api_url = 'https://api.aimlapi.com/v1/completions'  # Endpoint von aimlapi.com
-    api_key = 'fe54736c824741faa7ce47bd2488e8ac'  # Lade den API-Key aus den Umgebungsvariablen
+    api_key = os.getenv('AIMLAPI_API_KEY')  # Lade den API-Key aus den Umgebungsvariablen
 
     if not api_key:
         print("Error: Environment variable AIMLAPI_API_KEY is not set")
