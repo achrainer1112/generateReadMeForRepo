@@ -59,7 +59,6 @@ def main():
 
     repo_name = sys.argv[1]
     dry_run = sys.argv[2]
-    script_repo_path = sys.argv[3]
     repo_url = f"https://github.com/achrainer1112/{repo_name}.git"
 
     # Clone the repository using 'gh'
@@ -73,6 +72,7 @@ def main():
     cloned_repo_path = os.path.join(os.getcwd(), repo_name)
 
     # Read the prompt from prompt.txt in the script repository
+    script_repo_path = os.path.join(os.getcwd(), 'generateReadMeForRepo')  
     prompt_file_path = os.path.join(script_repo_path, 'prompt.txt')
     prompt_text = read_file(prompt_file_path)
 
