@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 # Define folders to be excluded from consideration
-exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle','.prt','.asm','.png']
+exclude_folders = ['.git', 'node_modules', 'build', 'dist', 'gradle','.asm','.prt','.png']
 
 # Function to read a file and return its contents as a string
 def read_file(file_path):
@@ -78,7 +78,7 @@ def main():
 
     # AI API information
     api_url = 'https://api.aimlapi.com/v1/completions'  # Endpoint von aimlapi.com
-    api_key_aiml = os.getenv('AIMLAPI_API_KEY')  # Lade den API-Key aus den Umgebungsvariablen
+    api_key = os.getenv('AIMLAPI_API_KEY')  # Lade den API-Key aus den Umgebungsvariablen
 
     if not api_key:
         print("Error: Environment variable AIMLAPI_API_KEY is not set")
