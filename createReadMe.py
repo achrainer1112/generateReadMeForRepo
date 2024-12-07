@@ -75,7 +75,6 @@ def main():
     script_repo_path = os.path.join(os.getcwd(), 'generateReadMeForRepo')  
     prompt_file_path = os.path.join(script_repo_path, 'prompt.txt')
     prompt_text = read_file(prompt_file_path)
-    print(prompt_text)
 
     # AI API information
     api_url = 'https://api.openai.com/v1/chat/completions'
