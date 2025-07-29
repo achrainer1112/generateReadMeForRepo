@@ -16,6 +16,57 @@ def read_file(file_path):
         print(f"File not found: {file_path}")
         return ""
 
+# Function to send a request to the AI API with chunking support
+def send_to_ai_chunked(api_url, api_key, text, max_tokens=100000):
+    """
+    Send text to AI API, chunking if necessary to avoid token limits
+    """
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    tokens = tokenizer.encode(text)
+    
+    if len(tokens) <= max_tokens:
+        # Text fits in one request
+        return send_to_ai(api_url, api_key, text)
+    
+    # Need to chunk the text
+    print(f"Text too long ({len(tokens)} tokens), chunking into smaller parts...")
+    
+    # Split into chunks
+    chunks = []
+    chunk_size = max_tokens - 1000  # Leave room for prompt overhead
+    
+    for i in range(0, len(tokens), chunk_size):
+        chunk_tokens = tokens[i:i + chunk_size]
+        chunk_text = tokenizer.decode(chunk_tokens)
+        chunks.append(chunk_text)
+    
+    # Process each chunk and combine responses
+    responses = []
+    for i, chunk in enumerate(chunks):
+        print(f"Processing chunk {i+1}/{len(chunks)}...")
+        chunk_prompt = f"""This is part {i+1} of {len(chunks)} of a repository analysis. 
+Please analyze this part and provide insights. If this is not the last part, focus on individual file analysis.
+If this is the last part (part {len(chunks)}), please provide a comprehensive summary.
+
+{chunk}"""
+        
+        response = send_to_ai(api_url, api_key, chunk_prompt)
+        if 'error' not in response:
+            responses.append(response['choices'][0]['message']['content'])
+        else:
+            responses.append(f"Error processing chunk {i+1}: {response['error']['message']}")
+    
+    # Combine all responses
+    combined_response = {
+        'choices': [{
+            'message': {
+                'content': "\n\n".join([f"## Part {i+1}\n{resp}" for i, resp in enumerate(responses)])
+            }
+        }]
+    }
+    
+    return combined_response
+
 # Function to send a request to the AI API
 def send_to_ai(api_url, api_key, text):
     headers = {
@@ -52,6 +103,51 @@ def count_tokens(text):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     return len(tokenizer.encode(text))
 
+# Function to prioritize important files and limit content
+def should_include_file(file_path, filename):
+    """
+    Determine if a file should be included based on importance and size
+    """
+    # Always include these important files
+    important_files = [
+        'README.md', 'readme.md', 'README.txt',
+        'package.json', 'requirements.txt', 'Cargo.toml', 'pom.xml',
+        'Dockerfile', 'docker-compose.yml',
+        '.env.example', 'config.py', 'settings.py'
+    ]
+    
+    # Important extensions to prioritize
+    important_extensions = ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.rs', '.go']
+    
+    # Skip very large files (over 50KB)
+    try:
+        if os.path.getsize(file_path) > 50000:
+            print(f"Skipping large file: {file_path}")
+            return False
+    except OSError:
+        return False
+    
+    # Always include important files
+    if filename in important_files:
+        return True
+    
+    # Include files with important extensions
+    _, ext = os.path.splitext(filename)
+    if ext.lower() in important_extensions:
+        return True
+    
+    # Skip binary files and other non-text files
+    skip_extensions = [
+        '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico',
+        '.pdf', '.zip', '.tar', '.gz', '.exe', '.dll',
+        '.so', '.dylib', '.class', '.jar'
+    ]
+    
+    if ext.lower() in skip_extensions:
+        return False
+    
+    return True
+
 def main():
     if len(sys.argv) < 3:
         print("Error: Missing repository name argument.")
@@ -71,8 +167,8 @@ def main():
     # Path to the cloned repository
     cloned_repo_path = os.path.join(os.getcwd(), repo_name)
 
-    # Read the prompt from prompt.txt in the script repository
-    script_repo_path = os.path.join(os.getcwd(), 'generateReadMeForRepo')  
+    # Read the prompt from prompt.txt in the workflow repository (corrected path)
+    script_repo_path = os.path.join(os.getcwd(), 'workflow-repo')  # Changed from 'generateReadMeForRepo'
     prompt_file_path = os.path.join(script_repo_path, 'prompt.txt')
     prompt_text = read_file(prompt_file_path)
 
@@ -87,22 +183,40 @@ def main():
     # Collect file details for summary
     affected_files = []
     total_characters = 0
+    skipped_files = []
 
     affected_files.append(prompt_file_path)
     total_characters += len(prompt_text)
 
-    # Prepare the prompt with contents of additional files
+    # Prepare the prompt with contents of additional files (with smart filtering)
     for root, dirs, filenames in os.walk(cloned_repo_path):
         # Remove directories that should be excluded
         dirs[:] = [d for d in dirs if not is_excluded_folder(os.path.join(root, d))]
         for filename in filenames:
             file_path = os.path.join(root, filename)
+            
+            # Check if we should include this file
+            if not should_include_file(file_path, filename):
+                skipped_files.append(file_path)
+                continue
+                
             try:
                 # Read file content and append it to the prompt
                 file_content = read_file(file_path)
+                
+                # Limit individual file content to prevent huge files
+                if len(file_content) > 10000:  # Limit to ~10KB per file
+                    file_content = file_content[:10000] + "\n... (file truncated)"
+                
                 prompt_text += f"\n\n### Content of {file_path}:\n{file_content}"
                 affected_files.append(file_path)
                 total_characters += len(file_content)
+                
+                # Stop if we're getting too large
+                if count_tokens(prompt_text) > 150000:  # Conservative limit
+                    print("Prompt getting too large, stopping file collection")
+                    break
+                    
             except Exception as e:
                 print(f"Error reading the file {file_path}: {e}")
 
@@ -117,13 +231,16 @@ def main():
         print(f"Affected Files and Paths:")
         for file in affected_files:
             print(f"- {file}")
+        print(f"Skipped Files:")
+        for file in skipped_files:
+            print(f"- {file}")
         print(f"Total Characters in Prompt Text: {total_characters}")
         print(f"Token count for model: {token_count}")
         print("Note: No AI request or repo changes are made.")
     else:
         try:
-            # Send the combined text to the AI and get the response
-            response = send_to_ai(api_url, api_key, prompt_text)
+            # Send the combined text to the AI and get the response (with chunking if needed)
+            response = send_to_ai_chunked(api_url, api_key, prompt_text)
 
             if 'error' in response:
                 # Extract and print the error message
